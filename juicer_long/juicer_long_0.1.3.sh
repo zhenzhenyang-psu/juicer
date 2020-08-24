@@ -13,13 +13,13 @@ nofrag=1
 minimap2Path="minimap2"
 
 #set junctionOnly=1 as the default: only look at contacts from ligation junction, eg: read with ABC fragment with reference start and end as A1,A2; B1,B2; C1,C2; will consider A2B1, B2C1 if pair_radius=1
-useJunctionOnly=1
 
+fragDist=100 #use fragDistance of 100bp as default
 usegzip=1
 
 
 ## Read arguments 
-usageHelp="Usage: ${0##*/} [-d topDir] [-g genomeID] [-m minimap2Path] [-s site]  [-y restriction site file]\n[-z reference genome file] [-D Juicer scripts directory]\n[-j useJunctionOnly] [-r pair_radius] [-t threads] [-b ligation] [-h] [-f]"
+usageHelp="Usage: ${0##*/} [-d topDir] [-g genomeID] [-m minimap2Path] [-s site]  [-y restriction site file]\n[-z reference genome file] [-D Juicer scripts directory]\n[-i fragDist] [-r pair_radius] [-t threads] [-b ligation] [-h] [-f]"
 genomeHelp="* [genomeID] must be defined in the script, e.g. \"hg19\" or \"mm10\" (default \n  \"$genomeID\"); alternatively, it can be defined using the -z command"
 excludeHelp="* -f: include fragment-delimited maps in hic file creation"
 minimap2Help="* -m: full path of minimap2, default is minimap2" 
@@ -28,8 +28,8 @@ siteHelp="* [site] must be defined in the script, e.g.  \"HindIII\" or \"MboI\" 
 siteFileHelp="* [restriction site file]: enter path for restriction site file (locations of\n  restriction sites in genome; can be generated with the script\n  misc/generate_site_positions.py)"
 stageHelp="* [stage]: must be one of \"merge\", \"final\", \"postproc\", or \"early\".\n    -Use \"early\" for an early exit, including map fastq reads to generate SAM\n     and process into pairs based on junction or distance\n    -Use \"merge\" when each single fastq has generated pair information,\n     but results from these multiple fastq files were not combined.\n    -Use \”final\” to generate .hic files and check .res.txt\n    --Use \"postproc\" when the hic files have been created and only\n     postprocessing feature annotation remains to be completed."
 ligationHelp="* [ligation junction]: use this string when counting ligation junctions"
-junctionHelp="-j [ligation junction contacts only]: \"-j 1\" for junction contacts only or \"-j 0\" for all ref start/end combinations"
 pairRadiusHelp="-r [pair_radius]: use \"-r 1\" if considering pairDistance of 1 only; use \"-r infinity\" if considering all interactions; \"-r 3\" will consider consider loci with pairDist<=3"
+fragDistHelp="-i [fragment_distance]: use \"-i 5000\" if considering fragment distance of 5000bp as the cutoff to count as a valid fragment; \"-i 100\" only considers distance btw mapped positions >100bp as a contact "
 topDirHelp="* -d [topDir] is the top level directory (default\n  \"$topDir\")\n  [topDir]/fastq must contain the fastq files\n  make sure that input read has to be in .fastq or .fastq.gz format, .fq format woun't work\n  [topDir]/aligned will be created for the final alignment"
 juicerDirHelp="* -D [juicerDir] is the juicer home directory \n  [juicerDir]/references must contain the refseq fasta\n  [juicerDir]/scripts must exist"
 threadsHelp="* -t threads "
@@ -43,8 +43,8 @@ printHelpAndExit() {
 	echo -e "$siteFileHelp"
     echo -e "$stageHelp"
     echo -e "$ligationHelp"
-    echo -e "$junctionHelp"
     echo -e "$pairRadiusHelp"
+    echo -e "$fragDistHelp"
     echo -e "$minimap2Help"
 	echo -e "$topDirHelp"
 	echo -e "$juicerDirHelp"
@@ -54,15 +54,15 @@ printHelpAndExit() {
 	exit "$1"
 }
 
-while getopts "d:g:s:y:b:j:r:m:z:m:S:D:t:f:h" opt; do
+while getopts "d:g:s:y:b:i:r:m:z:m:S:D:t:f:h" opt; do
 	case $opt in
 	d) topDir=$OPTARG ;;
 	g) genomeID=$OPTARG ;;
 	s) site=$OPTARG ;;
 	y) site_file=$OPTARG ;;
 	b) ligation=$OPTARG ;;
-	j) useJunctionOnly=$OPTARG ;;
 	r) pairRadius=$OPTARG ;;
+	i) fragDist=$OPTARG ;;
 	m) minimap2Path=$OPTARG;;
 	z) refSeq=$OPTARG ;;
 	S) stage=$OPTARG ;;
@@ -277,7 +277,6 @@ then
 			usegzip=0
 		fi
 		#source ${juiceDir}/scripts/common/countligations_long.sh
-
 		echo "readname is $fqName"
 		samName=$i".sam"
 		if [ -s ${samName} ]; then
@@ -292,18 +291,18 @@ then
 		if [ -s $splitdir/$jname".collisions.txt" ] && [ -s $splitdir/$jname".res.txt"  ] ; then
 			echo "collilsions and res.txt for $jname, move onto the next step of resolving pairs."
 		else
-			awk -f ${juiceDir}/scripts/juicer_long/1_collisions_long0.6_v0.2.awk \
+			awk -f ${juiceDir}/scripts/version_track/1_collisions_long0.6_v0.2.awk \
 				-v resfile=$i".res.txt" $samName > $i".collisions.txt" 
 			echo "The command to generate collisions.txt from SAM file is:" >> $headfile
-			echo "awk -f ${juiceDir}/scripts/juicer_long/1_collisions_long0.6_v0.2.awk -v resfile=$i".res.txt" $samName > $i".collisions.txt" " >> $headfile
+			echo "awk -f ${juiceDir}/scripts/version_track/1_collisions_long0.6_v0.2.awk -v resfile=$i".res.txt" $samName > $i".collisions.txt" " >> $headfile
 		fi
 		
-		echo "pair radius is ${pairRadius}, useJunctionOnly value is ${useJunctionOnly}" 
-		echo "pair radius is ${pairRadius}, useJunctionOnly value is ${useJunctionOnly}" >> $headfile
+		echo "pair radius is ${pairRadius}, fragment distance value is ${fragDist}" 
+		echo "pair radius is ${pairRadius}, fragment distance value is ${fragDist}" >> $headfile
 		echo "The command to generate merged pairs from collision file is :" >> $headfile
-		echo "awk -f ${juiceDir}/scripts/juicer_long/2_collision2pairs_v0.3.awk -v pair_radius=${pairRadius}  -v junctionOnly=${useJunctionOnly} $i".collisions.txt"  >  $i".merged.txt" " >> $headfile
-		awk -f ${juiceDir}/scripts/juicer_long/2_collision2pairs_v0.3.awk \
-		-v pair_radius=${pairRadius} -v junctionOnly=${useJunctionOnly} $i".collisions.txt"  >  $i".pairs.txt" 
+		echo "awk -f ${juiceDir}/scripts/version_track/2_collision2pairs_v0.4.awk -v pair_radius=${pairRadius}  -v fragmentDistance=${fragDist} $i".collisions.txt"  >  $i".merged.txt" " >> $headfile
+		awk -f ${juiceDir}/scripts/version_track/2_collision2pairs_v0.4.awk \
+		-v pair_radius=${pairRadius} -v fragmentDistance=${fragDist} $i".collisions.txt"  >  $i".pairs.txt" 
 
 		if [ $? -ne 0 ]; then
 			echo "***! Failure during chimera handling of $i"
@@ -361,7 +360,7 @@ then
 		export _JAVA_OPTIONS=-Xmx16384m
 	    export LC_ALL=en_US.UTF-8 
 	    head -n2 $headfile | tail -n1| awk '{printf"%-1000s\n", $0}' > $outputdir/inter.txt;
-	    cat $splitdir/*.res.txt | awk -f ${juiceDir}/scripts/juicer_long/stats_sub_long_v2.awk >> $outputdir/inter.txt
+	    cat $splitdir/*.res.txt | awk -f ${juiceDir}/scripts/version_track/stats_sub_long_v2.awk >> $outputdir/inter.txt
 	    cp $outputdir/inter.txt $outputdir/inter_30.txt
 		${juiceDir}/scripts/common/juicer_tools pre -s $outputdir/inter.txt -q 1 $outputdir/merged_sort.txt $outputdir/inter.hic ${genomeID}
 		${juiceDir}/scripts/common/juicer_tools pre -s $outputdir/inter_30.txt  -q 30 $outputdir/merged_sort.txt $outputdir/inter_30.hic ${genomeID}
@@ -375,6 +374,6 @@ fi
 #CHECK THAT PIPELINE WAS SUCCESSFUL
 export early=$earlyexit
 export splitdir=$splitdir
-source ${juiceDir}/scripts/juicer_long/check_long_v3.sh
+source ${juiceDir}/scripts/version_track/check_long_v3.sh
 
 
