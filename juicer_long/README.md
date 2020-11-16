@@ -7,5 +7,5 @@ ln -s CPU/common .
 
 ## Run commands
 t=20  
-bash juicer_long_0.1.3.sh\. 
+bash juicer_long_0.1.3.sh\    
 -g hg19 -D  /public/home/yangzhzh/projects/0_aiden_lab/home_juicer -t "$t" -s none -i 100 -r 1 -S early
